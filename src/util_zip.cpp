@@ -7,8 +7,6 @@
 #include <cstring>
 #include <zip.h>
 
-#pragma comment(lib,"zip.lib")
-
 std::unique_ptr<ZIPFile> ZIPFile::Open(const std::string &filePath,OpenFlags openFlags)
 {
 	decltype(umath::to_integral(openFlags)) flags = 0;
