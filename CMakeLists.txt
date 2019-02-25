@@ -58,8 +58,9 @@ set(ENABLE_STATIC_LIBRARY_FLAG 0)
 
 add_include_dir(sharedutils)
 add_include_dir(mathutil)
-add_include_dir(libzip)
 add_include_dir(libzip_conf)
+
+add_include_dir(libzip)
 
 set(DEFINITIONS)
 
