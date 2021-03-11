@@ -60,7 +60,7 @@ add_include_dir(sharedutils)
 add_include_dir(mathutil)
 add_include_dir(libzip_conf)
 
-add_include_dir(libzip)
+link_external_library(libzip)
 
 set(DEFINITIONS)
 
