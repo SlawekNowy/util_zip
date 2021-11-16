@@ -30,9 +30,12 @@ public:
 		ReadOnly = 16
 	};
 	static std::unique_ptr<ZIPFile> Open(const std::string &filePath,OpenFlags openFlags=OpenFlags::ReadOnly);
+	static std::unique_ptr<ZIPFile> Open(const void *zipData,size_t size);
 	~ZIPFile();
 	void AddFile(const std::string &fileName,const void *data,uint64_t size,bool bOverwrite=true);
 	void AddFile(const std::string &fileName,const std::string &data,bool bOverwrite=true);
+	bool ReadFile(const std::string &fileName,std::vector<uint8_t> &outData,std::string &outErr);
+	bool GetFileList(std::vector<std::string> &outFileList);
 };
 
 REGISTER_BASIC_ARITHMETIC_OPERATORS(ZIPFile::OpenFlags);
