@@ -12,32 +12,25 @@
 
 #undef ReplaceFile
 
-struct zip;
+class BaseZipFile;
 class ZIPFile
 {
-private:
-	ZIPFile(zip *z);
-	zip *m_zip;
-	std::vector<std::unique_ptr<std::vector<uint8_t>>> m_data;
 public:
-	enum class OpenFlags : int32_t
+	enum class OpenMode : uint8_t
 	{
-		None = 0,
-		CreateIfNotExist = 1,
-		ErrorIfExist = 2,
-		StrictChecks = 4,
-		TruncateIfExit = 8,
-		ReadOnly = 16
+		Read = 0u,
+		Write
 	};
-	static std::unique_ptr<ZIPFile> Open(const std::string &filePath,OpenFlags openFlags=OpenFlags::ReadOnly);
+	static std::unique_ptr<ZIPFile> Open(const std::string &filePath,OpenMode openFlags=OpenMode::Read);
 	static std::unique_ptr<ZIPFile> Open(const void *zipData,size_t size);
 	~ZIPFile();
-	void AddFile(const std::string &fileName,const void *data,uint64_t size,bool bOverwrite=true);
-	void AddFile(const std::string &fileName,const std::string &data,bool bOverwrite=true);
+	bool AddFile(const std::string &fileName,const void *data,uint64_t size,bool bOverwrite=true);
+	bool AddFile(const std::string &fileName,const std::string &data,bool bOverwrite=true);
 	bool ReadFile(const std::string &fileName,std::vector<uint8_t> &outData,std::string &outErr);
 	bool GetFileList(std::vector<std::string> &outFileList);
+private:
+	ZIPFile(std::unique_ptr<BaseZipFile> baseZipFile);
+	std::unique_ptr<BaseZipFile> m_baseZipFile = nullptr;
 };
-
-REGISTER_BASIC_ARITHMETIC_OPERATORS(ZIPFile::OpenFlags);
 
 #endif
