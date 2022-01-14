@@ -97,7 +97,13 @@ bool LibZipFile::AddFile(const std::string &fileName,const void *data,uint64_t s
 	zip_flags_t flags = ZIP_FL_ENC_GUESS;
 	if(bOverwrite == true)
 		flags |= ZIP_FL_OVERWRITE;
-	zip_file_add(m_zip,fileName.c_str(),zipSrc,flags);
+	auto normalizedFileName = fileName;
+	for(auto &c : normalizedFileName)
+	{
+		if(c == '\\')
+			c = '/';
+	}
+	zip_file_add(m_zip,normalizedFileName.c_str(),zipSrc,flags);
 	return true;
 }
 bool LibZipFile::ReadFile(const std::string &fileName,std::vector<uint8_t> &outData,std::string &outErr)
