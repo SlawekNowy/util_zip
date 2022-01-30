@@ -61,6 +61,7 @@ add_include_dir(mathutil)
 add_include_dir(libzip_conf)
 
 link_external_library(libzip)
+link_external_library(7zpp)
 
 set(DEFINITIONS)
 
