@@ -30,7 +30,7 @@ public:
 	bool GetFileList(std::vector<std::string> &outFileList);
 private:
 	ZIPFile(std::unique_ptr<BaseZipFile> baseZipFile);
-	std::unique_ptr<BaseZipFile> m_baseZipFile = nullptr;
+    std::unique_ptr<BaseZipFile> m_baseZipFile;
 };
 
 #endif
