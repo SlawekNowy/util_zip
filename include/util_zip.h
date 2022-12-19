@@ -28,6 +28,7 @@ public:
 	bool AddFile(const std::string &fileName,const std::string &data,bool bOverwrite=true);
 	bool ReadFile(const std::string &fileName,std::vector<uint8_t> &outData,std::string &outErr);
 	bool GetFileList(std::vector<std::string> &outFileList);
+	bool ExtractFiles(const std::string &dirName,std::string &outErr);
 private:
 	ZIPFile(std::unique_ptr<BaseZipFile> baseZipFile);
     std::unique_ptr<BaseZipFile> m_baseZipFile;
