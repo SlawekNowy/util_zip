@@ -6,6 +6,7 @@
 #include "util_zip.h"
 #include <cstring>
 #include <zip.h>
+#include <algorithm>
 #include <unordered_map>
 
 // TODO: Check if 7zpp works on Linux, and if so, switch to 7zpp entirely
@@ -30,6 +31,7 @@ public:
 		return AddFile(fileName,data.data(),data.size(),bOverwrite);
 	}
 	virtual bool ReadFile(const std::string &fileName,std::vector<uint8_t> &outData,std::string &outErr)=0;
+	virtual bool ExtractFiles(const std::string &dirName,std::string &outErr)=0;
 };
 
 class LibZipFile
@@ -42,6 +44,7 @@ public:
 	virtual bool GetFileList(std::vector<std::string> &outFileList) const override;
 	virtual bool AddFile(const std::string &fileName,const void *data,uint64_t size,bool bOverwrite=true) override;
 	virtual bool ReadFile(const std::string &fileName,std::vector<uint8_t> &outData,std::string &outErr) override;
+	virtual bool ExtractFiles(const std::string &dirName,std::string &outErr) override;
 private:
 	LibZipFile(zip *z)
 		: m_zip{z}
@@ -124,6 +127,11 @@ bool LibZipFile::ReadFile(const std::string &fileName,std::vector<uint8_t> &outD
 	zip_fread(f,outData.data(),outData.size());
 	return zip_fclose(f) == 0;
 }
+bool LibZipFile::ExtractFiles(const std::string &dirName,std::string &outErr)
+{
+	// TODO: Implement this
+	return false;
+}
 
 LibZipFile::~LibZipFile()
 {
@@ -143,6 +151,7 @@ public:
 	virtual bool GetFileList(std::vector<std::string> &outFileList) const override;
 	virtual bool AddFile(const std::string &fileName,const void *data,uint64_t size,bool bOverwrite=true) override;
 	virtual bool ReadFile(const std::string &fileName,std::vector<uint8_t> &outData,std::string &outErr) override;
+	virtual bool ExtractFiles(const std::string &dirName,std::string &outErr) override;
 private:
 	SevenZipFile() {}
 
@@ -185,9 +194,9 @@ static std::string program_name(bool bPost=false)
 std::unique_ptr<BaseZipFile> SevenZipFile::Open(const std::string &fileName,ZIPFile::OpenMode openMode)
 {
 	auto r = std::unique_ptr<SevenZipFile>{new SevenZipFile{}};
-	auto dllPath = program_name() +"/";
+	auto dllPath = program_name() +"\\";
 #ifdef _WIN32
-	std::string dllName = "7z.dll";
+	std::string dllName = "7zip.dll";
 #else
 	// TODO: Needs to be confirmed!
 	std::string dllName = "7z.so";
@@ -274,6 +283,21 @@ public:
 private:
 	std::atomic<bool> m_complete = false;
 };
+bool SevenZipFile::ExtractFiles(const std::string &dirName,std::string &outErr)
+{
+	if(!extractor)
+		return false;
+	std::vector<uint32_t> fileIndices;
+	fileIndices.reserve(m_hashToIndex.size());
+	for(auto &pair : m_hashToIndex)
+		fileIndices.push_back(pair.second);
+	SevenZipProgressCallback progressCallback {};
+	auto res = extractor->ExtractFilesFromArchive(fileIndices.data(),fileIndices.size(),dirName,&progressCallback);
+	if(!res)
+		return false;
+	progressCallback.WaitUntilComplete();
+	return true;
+}
 bool SevenZipFile::ReadFile(const std::string &fileName,std::vector<uint8_t> &outData,std::string &outErr)
 {
 	if(!extractor)
@@ -281,6 +305,7 @@ bool SevenZipFile::ReadFile(const std::string &fileName,std::vector<uint8_t> &ou
 	auto lFileName = fileName;
 	for(auto &c : lFileName)
 		c = std::tolower(c);
+	std::replace(lFileName.begin(),lFileName.end(),'/','\\');
 	auto hash = std::hash<std::string>{}(lFileName);
 	auto it = m_hashToIndex.find(hash);
 	if(it == m_hashToIndex.end())
@@ -330,6 +355,11 @@ ZIPFile::ZIPFile(std::unique_ptr<BaseZipFile> baseZipFile)
 ZIPFile::~ZIPFile()
 {
 	m_baseZipFile = nullptr;
+}
+
+bool ZIPFile::ExtractFiles(const std::string &dirName,std::string &outErr)
+{
+	return m_baseZipFile->ExtractFiles(dirName,outErr);
 }
 
 bool ZIPFile::GetFileList(std::vector<std::string> &outFileList)
