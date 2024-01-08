@@ -29,7 +29,7 @@ class BaseZipFile {
 	virtual bool AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite = true) = 0;
 	bool AddFile(const std::string &fileName, const std::string &data, bool bOverwrite = true) { return AddFile(fileName, data.data(), data.size(), bOverwrite); }
 	virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) = 0;
-	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float)> &progressCallback = nullptr) = 0;
+	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) = 0;
 };
 
 class LibZipFile : public BaseZipFile {
@@ -40,7 +40,7 @@ class LibZipFile : public BaseZipFile {
 	virtual bool GetFileList(std::vector<std::string> &outFileList) const override;
 	virtual bool AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite = true) override;
 	virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) override;
-	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float)> &progressCallback = nullptr) override;
+	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) override;
   private:
 	LibZipFile(zip *z) : m_zip {z} {}
 	zip *m_zip;
@@ -118,7 +118,7 @@ bool LibZipFile::ReadFile(const std::string &fileName, std::vector<uint8_t> &out
 	zip_fread(f, outData.data(), outData.size());
 	return zip_fclose(f) == 0;
 }
-bool LibZipFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float)> &progressCallback)
+bool LibZipFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback)
 {
 	// TODO: Implement this
 	return false;
@@ -137,7 +137,7 @@ class SevenZipFile : public BaseZipFile {
 	virtual bool GetFileList(std::vector<std::string> &outFileList) const override;
 	virtual bool AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite = true) override;
 	virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) override;
-	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float)> &progressCallback = nullptr) override;
+	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) override;
   private:
 	SevenZipFile() {}
 
@@ -232,7 +232,7 @@ bool SevenZipFile::AddFile(const std::string &fileName, const void *data, uint64
 
 class SevenZipProgressCallback : public SevenZip::ProgressCallback {
   public:
-	SevenZipProgressCallback(const std::function<bool(float)> &progressCallback) : m_progress {progressCallback} {}
+	SevenZipProgressCallback(const std::function<bool(float, bool)> &progressCallback) : m_progress {progressCallback} {}
 	/*
 	Called at beginning
 	*/
@@ -252,6 +252,8 @@ class SevenZipProgressCallback : public SevenZip::ProgressCallback {
 		m_complete = true;
 		m_cond.notify_one();
 		m_mutex.unlock();
+
+		UpdateProgress(0, true);
 	}
 
 	/*
@@ -273,23 +275,23 @@ class SevenZipProgressCallback : public SevenZip::ProgressCallback {
 		m_cond.wait(ul, [this]() -> bool { return m_complete; });
 	}
   private:
-	void UpdateProgress(size_t curFileBytes = 0)
+	void UpdateProgress(size_t curFileBytes = 0, bool isComplete = false)
 	{
 		if(!m_progress)
 			return;
 		auto progress = (m_totalBytes > 0) ? (static_cast<double>(m_bytesExtracted + curFileBytes) / static_cast<double>(m_totalBytes)) : 0.0;
-		m_cancel = m_progress(progress);
+		m_cancel = m_progress(progress, isComplete);
 	}
 	std::atomic<bool> m_complete = false;
 	std::atomic<bool> m_cancel = false;
-	std::function<bool(float)> m_progress = nullptr;
+	std::function<bool(float, bool)> m_progress = nullptr;
 	uint64_t m_totalBytes = 0;
 	uint64_t m_bytesExtracted = 0;
 
 	std::condition_variable m_cond;
 	std::mutex m_mutex;
 };
-bool SevenZipFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float)> &fprogressCallback)
+bool SevenZipFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &fprogressCallback)
 {
 	if(!extractor)
 		return false;
@@ -358,7 +360,7 @@ ZIPFile::ZIPFile(std::unique_ptr<BaseZipFile> baseZipFile) : m_baseZipFile(std::
 
 ZIPFile::~ZIPFile() { m_baseZipFile = nullptr; }
 
-bool ZIPFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float)> &progressCallback) { return m_baseZipFile->ExtractFiles(dirName, outErr, progressCallback); }
+bool ZIPFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback) { return m_baseZipFile->ExtractFiles(dirName, outErr, progressCallback); }
 
 bool ZIPFile::GetFileList(std::vector<std::string> &outFileList) { return m_baseZipFile->GetFileList(outFileList); }
 
