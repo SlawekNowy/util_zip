@@ -30,6 +30,7 @@ class BaseZipFile {
 	bool AddFile(const std::string &fileName, const std::string &data, bool bOverwrite = true) { return AddFile(fileName, data.data(), data.size(), bOverwrite); }
 	virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) = 0;
 	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) = 0;
+	virtual void SetPackProgressCallback(const std::function<void(double)> &progressCallback) {}
 };
 
 class LibZipFile : public BaseZipFile {
@@ -41,11 +42,21 @@ class LibZipFile : public BaseZipFile {
 	virtual bool AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite = true) override;
 	virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) override;
 	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) override;
+	void SetPackProgressCallback(const std::function<void(double)> &progressCallback);
   private:
-	LibZipFile(zip *z) : m_zip {z} {}
+	LibZipFile(zip *z);
 	zip *m_zip;
 	std::vector<std::unique_ptr<std::vector<uint8_t>>> m_data;
 };
+
+LibZipFile::LibZipFile(zip *z) : m_zip {z} {}
+
+void LibZipFile::SetPackProgressCallback(const std::function<void(double)> &progressCallback)
+{
+	auto *cpy = new std::function<void(double)> {progressCallback};
+	zip_register_progress_callback_with_state(
+	  m_zip, 0.005, +[](zip_t *zip, double progress, void *ptr) { (*static_cast<std::function<void(double)> *>(ptr))(progress); }, +[](void *ptr) { delete ptr; }, cpy);
+}
 
 std::unique_ptr<BaseZipFile> LibZipFile::Open(const std::string &fileName, ZIPFile::OpenMode openMode)
 {
@@ -361,6 +372,8 @@ ZIPFile::ZIPFile(std::unique_ptr<BaseZipFile> baseZipFile) : m_baseZipFile(std::
 ZIPFile::~ZIPFile() { m_baseZipFile = nullptr; }
 
 bool ZIPFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback) { return m_baseZipFile->ExtractFiles(dirName, outErr, progressCallback); }
+
+void ZIPFile::SetPackProgressCallback(const std::function<void(double)> &progressCallback) { m_baseZipFile->SetPackProgressCallback(progressCallback); }
 
 bool ZIPFile::GetFileList(std::vector<std::string> &outFileList) { return m_baseZipFile->GetFileList(outFileList); }
 
