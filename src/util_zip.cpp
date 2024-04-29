@@ -7,6 +7,7 @@
 #include <cstring>
 #include <zip.h>
 #include <algorithm>
+#include <sharedutils/util_string.h>
 #include <unordered_map>
 #include <condition_variable>
 #include <mutex>
@@ -232,7 +233,7 @@ bool SevenZipFile::GetFileList(std::vector<std::string> &outFileList) const
 	auto itemNames = extractor->GetItemsNames();
 	outFileList.reserve(itemNames.size());
 	for(auto &f : itemNames)
-		outFileList.push_back(std::string(f.begin(), f.end()));
+		outFileList.push_back(ustring::wstring_to_string(f));
 	return true;
 }
 
