@@ -1,3 +1,4 @@
+
 include(${CMAKE_SOURCE_DIR}/cmake/pr_common.cmake)
 
 set(PROJ_NAME util_zip)
@@ -9,7 +10,6 @@ if(WIN32)
 endif()
 pr_add_dependency(${PROJ_NAME} zip TARGET)
 
-pr_add_headers(${PROJ_NAME} "include/")
-pr_add_sources(${PROJ_NAME} "src/")
+pr_init_module(${PROJ_NAME})
 
 pr_finalize(${PROJ_NAME})
