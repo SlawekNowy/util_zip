@@ -2,8 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-module;
-
+#include "stdafx_zip.h"
+#include "util_zip.h"
 #include <cstring>
 #include <zip.h>
 #include <algorithm>
@@ -22,52 +22,48 @@ module;
 #include <7zpp/7zpp.h>
 #endif
 
-module util_zip;
-
 #pragma optimize("", off)
-namespace uzip {
-	class BaseZipFile {
-	  public:
-		virtual ~BaseZipFile() = default;
-		virtual bool GetFileList(std::vector<std::string> &outFileList) const = 0;
-		virtual bool AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite = true) = 0;
-		bool AddFile(const std::string &fileName, const std::string &data, bool bOverwrite = true) { return AddFile(fileName, data.data(), data.size(), bOverwrite); }
-		virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) = 0;
-		virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) = 0;
-		virtual void SetPackProgressCallback(const std::function<void(double)> &progressCallback) {}
-	};
-
-	class LibZipFile : public BaseZipFile {
-	  public:
-		static std::unique_ptr<BaseZipFile> Open(const std::string &fileName, uzip::ZIPFile::OpenMode openMode);
-		static std::unique_ptr<BaseZipFile> Open(const void *zipData, size_t size);
-		virtual ~LibZipFile() override;
-		virtual bool GetFileList(std::vector<std::string> &outFileList) const override;
-		virtual bool AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite = true) override;
-		virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) override;
-		virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) override;
-		void SetPackProgressCallback(const std::function<void(double)> &progressCallback);
-	  private:
-		LibZipFile(zip *z);
-		zip *m_zip;
-		std::vector<std::unique_ptr<std::vector<uint8_t>>> m_data;
-	};
+class BaseZipFile {
+  public:
+	virtual ~BaseZipFile() = default;
+	virtual bool GetFileList(std::vector<std::string> &outFileList) const = 0;
+	virtual bool AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite = true) = 0;
+	bool AddFile(const std::string &fileName, const std::string &data, bool bOverwrite = true) { return AddFile(fileName, data.data(), data.size(), bOverwrite); }
+	virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) = 0;
+	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) = 0;
+	virtual void SetPackProgressCallback(const std::function<void(double)> &progressCallback) {}
 };
 
-uzip::LibZipFile::LibZipFile(zip *z) : m_zip {z} {}
+class LibZipFile : public BaseZipFile {
+  public:
+	static std::unique_ptr<BaseZipFile> Open(const std::string &fileName, ZIPFile::OpenMode openMode);
+	static std::unique_ptr<BaseZipFile> Open(const void *zipData, size_t size);
+	virtual ~LibZipFile() override;
+	virtual bool GetFileList(std::vector<std::string> &outFileList) const override;
+	virtual bool AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite = true) override;
+	virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) override;
+	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) override;
+	void SetPackProgressCallback(const std::function<void(double)> &progressCallback);
+  private:
+	LibZipFile(zip *z);
+	zip *m_zip;
+	std::vector<std::unique_ptr<std::vector<uint8_t>>> m_data;
+};
 
-void uzip::LibZipFile::SetPackProgressCallback(const std::function<void(double)> &progressCallback)
+LibZipFile::LibZipFile(zip *z) : m_zip {z} {}
+
+void LibZipFile::SetPackProgressCallback(const std::function<void(double)> &progressCallback)
 {
 	auto *cpy = new std::function<void(double)> {progressCallback};
 	zip_register_progress_callback_with_state(
 	  m_zip, 0.005, +[](zip_t *zip, double progress, void *ptr) { (*static_cast<std::function<void(double)> *>(ptr))(progress); }, +[](void *ptr) { delete ptr; }, cpy);
 }
 
-std::unique_ptr<uzip::BaseZipFile> uzip::LibZipFile::Open(const std::string &fileName, uzip::ZIPFile::OpenMode openMode)
+std::unique_ptr<BaseZipFile> LibZipFile::Open(const std::string &fileName, ZIPFile::OpenMode openMode)
 {
 	int flags = 0;
 	flags |= ZIP_CREATE;
-	if(openMode == uzip::ZIPFile::OpenMode::Read)
+	if(openMode == ZIPFile::OpenMode::Read)
 		flags |= ZIP_RDONLY;
 
 	int err = -1;
@@ -77,7 +73,7 @@ std::unique_ptr<uzip::BaseZipFile> uzip::LibZipFile::Open(const std::string &fil
 	std::unique_ptr<LibZipFile> zipFile {new LibZipFile {z}};
 	return zipFile;
 }
-std::unique_ptr<uzip::BaseZipFile> uzip::LibZipFile::Open(const void *zipData, size_t size)
+std::unique_ptr<BaseZipFile> LibZipFile::Open(const void *zipData, size_t size)
 {
 	zip_error_t err;
 	auto *zs = zip_source_buffer_create(zipData, size, 0, &err); // Will be released automatically
@@ -89,7 +85,7 @@ std::unique_ptr<uzip::BaseZipFile> uzip::LibZipFile::Open(const void *zipData, s
 	std::unique_ptr<LibZipFile> zipFile {new LibZipFile {z}};
 	return zipFile;
 }
-bool uzip::LibZipFile::GetFileList(std::vector<std::string> &outFileList) const
+bool LibZipFile::GetFileList(std::vector<std::string> &outFileList) const
 {
 	auto n = zip_get_num_entries(m_zip, 0);
 	outFileList.reserve(n);
@@ -99,7 +95,7 @@ bool uzip::LibZipFile::GetFileList(std::vector<std::string> &outFileList) const
 	}
 	return true;
 }
-bool uzip::LibZipFile::AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite)
+bool LibZipFile::AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite)
 {
 	m_data.push_back(std::make_unique<std::vector<uint8_t>>(size));
 	auto &vdata = *m_data.back();
@@ -117,7 +113,7 @@ bool uzip::LibZipFile::AddFile(const std::string &fileName, const void *data, ui
 	zip_file_add(m_zip, normalizedFileName.c_str(), zipSrc, flags);
 	return true;
 }
-bool uzip::LibZipFile::ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr)
+bool LibZipFile::ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr)
 {
 	struct zip_stat st;
 	zip_stat_init(&st);
@@ -134,35 +130,33 @@ bool uzip::LibZipFile::ReadFile(const std::string &fileName, std::vector<uint8_t
 	zip_fread(f, outData.data(), outData.size());
 	return zip_fclose(f) == 0;
 }
-bool uzip::LibZipFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback)
+bool LibZipFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback)
 {
 	// TODO: Implement this
 	return false;
 }
 
-uzip::LibZipFile::~LibZipFile() { zip_close(m_zip); }
+LibZipFile::~LibZipFile() { zip_close(m_zip); }
 
 /////////////
 
 #ifdef ENABLE_7Z_FOR_READING
-namespace uzip {
-	class SevenZipFile : public BaseZipFile {
-	  public:
-		static std::unique_ptr<BaseZipFile> Open(const std::string &fileName, uzip::ZIPFile::OpenMode openMode);
+class SevenZipFile : public BaseZipFile {
+  public:
+	static std::unique_ptr<BaseZipFile> Open(const std::string &fileName, ZIPFile::OpenMode openMode);
 
-		virtual ~SevenZipFile() override;
-		virtual bool GetFileList(std::vector<std::string> &outFileList) const override;
-		virtual bool AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite = true) override;
-		virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) override;
-		virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) override;
-	  private:
-		SevenZipFile() {}
+	virtual ~SevenZipFile() override;
+	virtual bool GetFileList(std::vector<std::string> &outFileList) const override;
+	virtual bool AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite = true) override;
+	virtual bool ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) override;
+	virtual bool ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback = nullptr) override;
+  private:
+	SevenZipFile() {}
 
-		SevenZip::SevenZipLibrary lib;
-		std::unique_ptr<SevenZip::SevenZipExtractor> extractor = nullptr;
-		std::unique_ptr<SevenZip::SevenZipCompressor> compressor = nullptr;
-		std::unordered_map<size_t, uint32_t> m_hashToIndex;
-	};
+	SevenZip::SevenZipLibrary lib;
+	std::unique_ptr<SevenZip::SevenZipExtractor> extractor = nullptr;
+	std::unique_ptr<SevenZip::SevenZipCompressor> compressor = nullptr;
+	std::unordered_map<size_t, uint32_t> m_hashToIndex;
 };
 
 static std::string program_name(bool bPost = false)
@@ -194,7 +188,7 @@ static std::string program_name(bool bPost = false)
 	return programPath;
 }
 
-std::unique_ptr<uzip::BaseZipFile> uzip::SevenZipFile::Open(const std::string &fileName, uzip::ZIPFile::OpenMode openMode)
+std::unique_ptr<BaseZipFile> SevenZipFile::Open(const std::string &fileName, ZIPFile::OpenMode openMode)
 {
 	auto r = std::unique_ptr<SevenZipFile> {new SevenZipFile {}};
 	auto dllPath = program_name() + "\\";
@@ -207,7 +201,7 @@ std::unique_ptr<uzip::BaseZipFile> uzip::SevenZipFile::Open(const std::string &f
 	if(!r->lib.Load(dllPath + dllName) && !r->lib.Load(dllPath + "bin/" + dllName))
 		return nullptr;
 
-	if(openMode == uzip::ZIPFile::OpenMode::Read) {
+	if(openMode == ZIPFile::OpenMode::Read) {
 		r->extractor = std::make_unique<SevenZip::SevenZipExtractor>(r->lib, fileName);
 		if(!r->extractor->DetectCompressionFormat())
 			return nullptr;
@@ -230,9 +224,9 @@ std::unique_ptr<uzip::BaseZipFile> uzip::SevenZipFile::Open(const std::string &f
 	return r;
 }
 
-uzip::SevenZipFile::~SevenZipFile() {}
+SevenZipFile::~SevenZipFile() {}
 
-bool uzip::SevenZipFile::GetFileList(std::vector<std::string> &outFileList) const
+bool SevenZipFile::GetFileList(std::vector<std::string> &outFileList) const
 {
 	if(!extractor)
 		return false;
@@ -243,7 +237,7 @@ bool uzip::SevenZipFile::GetFileList(std::vector<std::string> &outFileList) cons
 	return true;
 }
 
-bool uzip::SevenZipFile::AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite)
+bool SevenZipFile::AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite)
 {
 	return false; // Not yet implemented
 }
@@ -309,7 +303,7 @@ class SevenZipProgressCallback : public SevenZip::ProgressCallback {
 	std::condition_variable m_cond;
 	std::mutex m_mutex;
 };
-bool uzip::SevenZipFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &fprogressCallback)
+bool SevenZipFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &fprogressCallback)
 {
 	if(!extractor)
 		return false;
@@ -325,7 +319,7 @@ bool uzip::SevenZipFile::ExtractFiles(const std::string &dirName, std::string &o
 		progressCallback.WaitUntilComplete();
 	return true;
 }
-bool uzip::SevenZipFile::ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr)
+bool SevenZipFile::ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr)
 {
 	if(!extractor)
 		return false;
@@ -351,42 +345,42 @@ bool uzip::SevenZipFile::ReadFile(const std::string &fileName, std::vector<uint8
 
 /////////////
 
-std::unique_ptr<uzip::ZIPFile> uzip::ZIPFile::Open(const void *zipData, size_t size)
+std::unique_ptr<ZIPFile> ZIPFile::Open(const void *zipData, size_t size)
 {
 	auto baseZip = LibZipFile::Open(zipData, size);
 	if(!baseZip)
 		return nullptr;
-	return std::unique_ptr<uzip::ZIPFile>(new uzip::ZIPFile(std::move(baseZip)));
+	return std::unique_ptr<ZIPFile>(new ZIPFile(std::move(baseZip)));
 }
-std::unique_ptr<uzip::ZIPFile> uzip::ZIPFile::Open(const std::string &filePath, OpenMode openMode)
+std::unique_ptr<ZIPFile> ZIPFile::Open(const std::string &filePath, OpenMode openMode)
 {
 #ifdef ENABLE_7Z_FOR_READING
 	if(openMode == OpenMode::Read) {
 		auto baseZip = SevenZipFile::Open(filePath, openMode);
 		if(!baseZip)
 			return nullptr;
-		return std::unique_ptr<uzip::ZIPFile>(new uzip::ZIPFile(std::move(baseZip)));
+		return std::unique_ptr<ZIPFile>(new ZIPFile(std::move(baseZip)));
 	}
 #endif
 	auto baseZip = LibZipFile::Open(filePath, openMode);
 	if(!baseZip)
 		return nullptr;
-	return std::unique_ptr<uzip::ZIPFile>(new uzip::ZIPFile(std::move(baseZip)));
+	return std::unique_ptr<ZIPFile>(new ZIPFile(std::move(baseZip)));
 }
 
-uzip::ZIPFile::ZIPFile(std::unique_ptr<BaseZipFile> baseZipFile) : m_baseZipFile(std::move(baseZipFile)) {}
+ZIPFile::ZIPFile(std::unique_ptr<BaseZipFile> baseZipFile) : m_baseZipFile(std::move(baseZipFile)) {}
 
-uzip::ZIPFile::~ZIPFile() { m_baseZipFile = nullptr; }
+ZIPFile::~ZIPFile() { m_baseZipFile = nullptr; }
 
-bool uzip::ZIPFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback) { return m_baseZipFile->ExtractFiles(dirName, outErr, progressCallback); }
+bool ZIPFile::ExtractFiles(const std::string &dirName, std::string &outErr, const std::function<bool(float, bool)> &progressCallback) { return m_baseZipFile->ExtractFiles(dirName, outErr, progressCallback); }
 
-void uzip::ZIPFile::SetPackProgressCallback(const std::function<void(double)> &progressCallback) { m_baseZipFile->SetPackProgressCallback(progressCallback); }
+void ZIPFile::SetPackProgressCallback(const std::function<void(double)> &progressCallback) { m_baseZipFile->SetPackProgressCallback(progressCallback); }
 
-bool uzip::ZIPFile::GetFileList(std::vector<std::string> &outFileList) { return m_baseZipFile->GetFileList(outFileList); }
+bool ZIPFile::GetFileList(std::vector<std::string> &outFileList) { return m_baseZipFile->GetFileList(outFileList); }
 
-bool uzip::ZIPFile::ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) { return m_baseZipFile->ReadFile(fileName, outData, outErr); }
+bool ZIPFile::ReadFile(const std::string &fileName, std::vector<uint8_t> &outData, std::string &outErr) { return m_baseZipFile->ReadFile(fileName, outData, outErr); }
 
-bool uzip::ZIPFile::AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite) { return m_baseZipFile->AddFile(fileName, data, size, bOverwrite); }
+bool ZIPFile::AddFile(const std::string &fileName, const void *data, uint64_t size, bool bOverwrite) { return m_baseZipFile->AddFile(fileName, data, size, bOverwrite); }
 
-bool uzip::ZIPFile::AddFile(const std::string &fileName, const std::string &data, bool bOverwrite) { return AddFile(fileName, data.data(), data.size(), bOverwrite); }
+bool ZIPFile::AddFile(const std::string &fileName, const std::string &data, bool bOverwrite) { return AddFile(fileName, data.data(), data.size(), bOverwrite); }
 #pragma optimize("", on)
